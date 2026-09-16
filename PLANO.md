@@ -17,16 +17,16 @@ Legenda: `[ ]` pendente · `[x]` concluído · `Tentativas: N`
 - [x] task-manager-api: idem
 - [x] Commit `docs: análise manual dos 3 projetos`
 
-## Etapa 2 — Criação da Skill em `code-smells-project/.claude/skills/refactor-arch/` (Tentativas: 0)
-- [ ] `SKILL.md` com 3 fases sequenciais e gate de confirmação na Fase 2
-- [ ] `references/01-project-analysis.md` (análise de projeto)
-- [ ] `references/02-antipattern-catalog.md` (≥8 anti-patterns, 4 severidades, inclui APIs deprecated)
-- [ ] `references/03-audit-report-template.md` (template do relatório)
-- [ ] `references/04-mvc-guidelines.md` (guidelines de arquitetura MVC)
-- [ ] `references/05-refactoring-playbook.md` (≥8 padrões com antes/depois)
-- [ ] `references/06-validation-runbook.md` (validação: boot + endpoints)
-- [ ] Verificação objetiva: contagens mínimas + skill reconhecida pelo Claude Code
-- [ ] Commit `feat(skill): cria skill refactor-arch com referências`
+## Etapa 2 — Criação da Skill em `code-smells-project/.claude/skills/refactor-arch/` (Tentativas: 1)
+- [x] `SKILL.md` com 3 fases sequenciais e gate de confirmação na Fase 2
+- [x] `references/01-project-analysis.md` (análise de projeto)
+- [x] `references/02-antipattern-catalog.md` (≥8 anti-patterns, 4 severidades, inclui APIs deprecated)
+- [x] `references/03-audit-report-template.md` (template do relatório)
+- [x] `references/04-mvc-guidelines.md` (guidelines de arquitetura MVC)
+- [x] `references/05-refactoring-playbook.md` (≥8 padrões com antes/depois)
+- [x] `references/06-validation-runbook.md` (validação: boot + endpoints)
+- [x] Verificação objetiva: contagens mínimas + skill reconhecida pelo Claude Code
+- [x] Commit `feat(skill): cria skill refactor-arch com referências`
 
 ## Etapa 3 — Execução no Projeto 1: code-smells-project (Tentativas: 0)
 - [ ] Rodar `/refactor-arch` (headless) — Fase 1 detecta Python/Flask e imprime resumo
