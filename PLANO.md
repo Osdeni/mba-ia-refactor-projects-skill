@@ -11,11 +11,11 @@ Legenda: `[ ]` pendente · `[x]` concluído · `Tentativas: N`
 - [x] Salvar memória de preferências de fluxo
 - [x] Commit `docs: adiciona plano de execução do desafio`
 
-## Etapa 1 — Análise Manual (README seção A) (Tentativas: 0)
-- [ ] code-smells-project: ≥5 problemas (≥1 CRITICAL/HIGH, ≥2 MEDIUM, ≥2 LOW) com arquivo:linha e justificativa
-- [ ] ecommerce-api-legacy: idem
-- [ ] task-manager-api: idem
-- [ ] Commit `docs: análise manual dos 3 projetos`
+## Etapa 1 — Análise Manual (README seção A) (Tentativas: 1)
+- [x] code-smells-project: ≥5 problemas (≥1 CRITICAL/HIGH, ≥2 MEDIUM, ≥2 LOW) com arquivo:linha e justificativa
+- [x] ecommerce-api-legacy: idem
+- [x] task-manager-api: idem
+- [x] Commit `docs: análise manual dos 3 projetos`
 
 ## Etapa 2 — Criação da Skill em `code-smells-project/.claude/skills/refactor-arch/` (Tentativas: 0)
 - [ ] `SKILL.md` com 3 fases sequenciais e gate de confirmação na Fase 2
