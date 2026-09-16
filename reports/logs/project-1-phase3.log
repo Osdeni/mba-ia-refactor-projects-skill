@@ -1,0 +1,90 @@
+```
+================================
+PHASE 3: REFACTORING COMPLETE
+================================
+## New Project Structure
+code-smells-project/
+├── app.py                        # create_app() + app.run — `python app.py` inalterado
+├── config/settings.py            # env vars com defaults seguros
+├── constants.py                  # categorias, status, faixas de desconto, versão
+├── errors.py                     # AppError, ValidationError, NotFoundError, Unauthorized/Forbidden
+├── .env.example  .gitignore  README.md  requirements.txt
+├── database/
+│   ├── connection.py             # conexão por request (flask.g), transaction() reentrante, conexão read-only
+│   ├── schema.py                 # CREATE TABLE com FK/NOT NULL/UNIQUE/CHECK
+│   └── seed.py                   # seeds com senha hasheada
+├── models/
+│   ├── produto_model.py  usuario_model.py  pedido_model.py   # SQL parametrizado
+│   └── serializers.py            # whitelist (nunca expõe senha)
+├── services/
+│   ├── pedido_service.py         # criação transacional + baixa de estoque atômica
+│   ├── auth_service.py           # login com verify-and-upgrade de hash legado
+│   ├── usuario_service.py  relatorio_service.py  admin_service.py  notificacao_service.py
+├── validators/
+│   └── produto_validator.py  usuario_validator.py  pedido_validator.py
+├── controllers/
+│   └── produto_  usuario_  auth_  pedido_  relatorio_  health_  home_  admin_controller.py
+├── routes/
+│   └── __init__.py (register_blueprints)  produto_  usuario_  pedido_  relatorio_  sistema_routes.py
+├── middlewares/
+│   ├── error_handler.py          # envelope {"erro", "sucesso": false}, sem str(e)
+│   └── auth.py                   # require_admin (X-Admin-Token)
+└── utils/
+    ├── logger.py                 # logging em vez de print
+    └── security.py               # hash_password / verify_password (werkzeug scrypt)
+```
+Removidos: `controllers.py`, `models.py`, `database.py` (sem imports obsoletos). LOC: 780 → 1118 em 45 arquivos.
+
+## Validation
+  ✓ Application boots without errors (port 5000, 1s) — também sobe sem nenhuma variável de ambiente (`env -i`)
+  ✓ All endpoints respond correctly (19/19 — see table)
+  ✓ Zero CRITICAL/HIGH anti-patterns remaining (0 LOW accepted; os únicos hits da grep são falsos positivos: nomes de tabela vindos de tupla fixa em `schema.py`/`seed.py`, concatenação de mensagem de erro no validador, e o hash lido internamente em `usuario_model.buscar_credenciais` só para o serviço de auth)
+  ✓ `py_compile` OK em todos os módulos; `flask-cors` atualizado 5.0.1 → 6.0.1
+  ✓ Banco legado (senha em texto puro, schema antigo sem FK): login 200, hash migrado para `scrypt:` no primeiro login, segundo login 200, tentativa de SQLi `x' OR '1'='1` → 401
+  ✓ Sondas de falha que davam 500 agora: `"preco":"abc"` → 400, body vazio → 400, item sem `quantidade` → 400, nome com apóstrofo → 201, Content-Type errado → 400; servidor continua vivo depois
+
+## Endpoint check
+| METHOD | PATH | baseline | after | keys match |
+|---|---|---|---|---|
+| GET | / | 200 [endpoints,mensagem,versao] | 200 [endpoints,mensagem,versao] | yes |
+| GET | /produtos | 200 [dados,sucesso] | 200 [dados,sucesso] | yes |
+| GET | /produtos/busca?q=…&categoria=…&preco_min=…&preco_max=… | 200 [dados,sucesso,total] | 200 [dados,sucesso,total] | yes |
+| GET | /produtos/1 | 200 [dados,sucesso] | 200 [dados,sucesso] | yes |
+| POST | /produtos | 201 [dados,mensagem,sucesso] | 201 [dados,mensagem,sucesso] | yes |
+| PUT | /produtos/{id} | 200 [mensagem,sucesso] | 200 [mensagem,sucesso] | yes |
+| DELETE | /produtos/{id} | 200 [mensagem,sucesso] | 200 [mensagem,sucesso] | yes |
+| GET | /usuarios | 200 [dados,sucesso] | 200 [dados,sucesso] | yes (sem `senha` nos itens) |
+| GET | /usuarios/1 | 200 [dados,sucesso] | 200 [dados,sucesso] | yes (sem `senha`) |
+| POST | /usuarios | 201 [dados,sucesso] | 201 [dados,sucesso] | yes |
+| POST | /login (ok) | 200 [dados,mensagem,sucesso] | 200 [dados,mensagem,sucesso] | yes |
+| POST | /login (senha errada) | 401 [erro,sucesso] | 401 [erro,sucesso] | yes |
+| POST | /pedidos | 201 [dados,mensagem,sucesso] | 201 [dados,mensagem,sucesso] | yes |
+| GET | /pedidos | 200 [dados,sucesso] | 200 [dados,sucesso] | yes |
+| GET | /pedidos/usuario/2 | 200 [dados,sucesso] | 200 [dados,sucesso] | yes |
+| PUT | /pedidos/{id}/status | 200 [mensagem,sucesso] | 200 [mensagem,sucesso] | yes |
+| GET | /relatorios/vendas | 200 [dados,sucesso] | 200 [dados,sucesso] | yes |
+| GET | /health | 200 [ambiente,counts,database,db_path,debug,secret_key,status,versao] | 200 [ambiente,counts,database,status,versao] | yes (campos sensíveis removidos) |
+| POST | /admin/query (SELECT) | 200 [dados,sucesso] | 200 [dados,sucesso] (com token) | yes |
+| POST | /admin/reset-db | 200 [mensagem,sucesso] | 200 [mensagem,sucesso] (com token) | yes |
+| GET | /produtos/99999 | 404 [erro,sucesso] | 404 [erro,sucesso] | yes |
+| GET | /usuarios/99999 | 404 [erro] | 404 [erro,sucesso] | envelope `erro` mantido; `sucesso:false` padronizado |
+| POST | /produtos (campo faltando) | 400 [erro] | 400 [erro,sucesso] | idem, mesma mensagem |
+| POST | /pedidos (itens vazio) | 400 [erro] | 400 [erro,sucesso] | idem, mesma mensagem |
+| PUT | /pedidos/{id}/status (inválido) | 400 [erro] | 400 [erro,sucesso] | idem, mesma mensagem |
+| POST | /admin/query (DELETE) | 200 [mensagem,sucesso] | 400 [erro,sucesso] | security-driven (read-only) |
+
+## Contract changes (security-driven)
+- GET /health: removidos `secret_key`, `debug` e `db_path` da resposta.
+- GET /usuarios e GET /usuarios/{id}: campo `senha` não é mais retornado.
+- POST /admin/reset-db e POST /admin/query: exigem header `X-Admin-Token` igual a `ADMIN_TOKEN` (401 token inválido, 403 se `ADMIN_TOKEN` não configurado).
+- POST /admin/query: aceita apenas `SELECT` em conexão somente leitura; outros comandos → 400.
+- Senhas gravadas com hash (scrypt via werkzeug); usuários seedados e bancos antigos continuam logando (upgrade transparente).
+- Erros de cliente que antes geravam 500 (tipos errados, body vazio, item incompleto, apóstrofo) agora retornam 400; todo erro usa `{"erro", "sucesso": false}` e nunca expõe a exceção interna.
+- Integridade: PUT /pedidos/{id}/status de pedido inexistente → 404 (antes 200 silencioso); POST /pedidos com `usuario_id` inexistente ou `quantidade` ≤ 0 → 400; POST /usuarios com e-mail duplicado → 400; senha mínima de 6 caracteres. DELETE /produtos mantém 200 e os itens de pedido passam a `produto_id` nulo (nome "Desconhecido", como o fallback original).
+- Defaults de runtime: `DEBUG=false`, `HOST=127.0.0.1` (antes `0.0.0.0` + debug ligado); CORS via `CORS_ORIGINS` (default `*` mantém o comportamento).
+
+## Next steps
+- Review the diff and commit the refactored code (`git status` mostra 3 arquivos removidos, 4 modificados e 10 novos pacotes/arquivos)
+- Report kept at ../reports/audit-project-1.md
+================================
+```
