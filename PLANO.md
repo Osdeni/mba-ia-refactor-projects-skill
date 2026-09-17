@@ -55,12 +55,12 @@ Legenda: `[ ]` pendente · `[x]` concluído · `Tentativas: N`
 - [x] Checklist de validação do projeto 3 preenchido
 - [x] Commit `refactor(task-manager-api): aplica MVC via skill refactor-arch + relatório 3`
 
-## Etapa 6 — README final (Tentativas: 0)
-- [ ] Seção B "Construção da Skill"
-- [ ] Seção C "Resultados" (findings por severidade, antes/depois, checklists, logs, observações por stack)
-- [ ] Seção D "Como Executar"
-- [ ] As 3 cópias da skill idênticas (`diff -r`)
-- [ ] Commit `docs: README com construção da skill, resultados e como executar`
+## Etapa 6 — README final (Tentativas: 1)
+- [x] Seção B "Construção da Skill"
+- [x] Seção C "Resultados" (findings por severidade, antes/depois, checklists, logs, observações por stack)
+- [x] Seção D "Como Executar"
+- [x] As 3 cópias da skill idênticas (`diff -r`)
+- [x] Commit `docs: README com construção da skill, resultados e como executar`
 
 ## Etapa 7 — Entrega (Tentativas: 0)
 - [ ] `git status` limpo; `reports/audit-project-{1,2,3}.md` presentes
