@@ -1,7 +1,8 @@
 # Validação final a partir de um clone limpo do GitHub
 
-Repositório: https://github.com/Osdeni/mba-ia-refactor-projects-skill (commit 25c0f29)
+Repositório: https://github.com/Osdeni/mba-ia-refactor-projects-skill (commit 26d210f)
 Procedimento: git clone → venv/npm install do zero → seed (P3) → boot com PORT/ADMIN_TOKEN → smoke test de todas as rotas.
+Projetos 1 e 3 validados no clone do commit d534430 (código inalterado desde então); projeto 2 revalidado no clone do commit 26d210f (re-execução da skill).
 
 ## Projeto 1
 ```
