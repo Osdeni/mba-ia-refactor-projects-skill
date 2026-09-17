@@ -2,12 +2,16 @@
 
 const db = require('../database/connection');
 
-function findActiveById(id) {
-  return db.get('SELECT id, title, price, active FROM courses WHERE id = ? AND active = 1', [id]);
+async function findActiveById(id) {
+    return db.get('SELECT id, title, price, active FROM courses WHERE id = ? AND active = 1', [id]);
 }
 
-function findAll() {
-  return db.all('SELECT id, title, price, active FROM courses ORDER BY id');
+async function create({ title, price, active = true }) {
+    const { lastID } = await db.run(
+        'INSERT INTO courses (title, price, active) VALUES (?, ?, ?)',
+        [title, price, active ? 1 : 0]
+    );
+    return { id: lastID, title, price, active: active ? 1 : 0 };
 }
 
-module.exports = { findActiveById, findAll };
+module.exports = { findActiveById, create };

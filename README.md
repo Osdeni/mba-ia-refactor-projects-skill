@@ -159,7 +159,7 @@ Execução real da skill nos 3 projetos, em modo headless (`claude -p`), com o m
 | Projeto | Stack detectada (Fase 1) | CRITICAL | HIGH | MEDIUM | LOW | Total | Relatório |
 |---|---|---|---|---|---|---|---|
 | 1 — code-smells-project | Python 3.12 + Flask 3.1.1 · Monolith · 4 arquivos · 19 rotas | 8 | 5 | 5 | 3 | **21** | [`reports/audit-project-1.md`](reports/audit-project-1.md) |
-| 2 — ecommerce-api-legacy | JavaScript (Node 24) + Express 4.22.1 · Monolith · 3 arquivos · 3 rotas | 5 | 5 | 5 | 3 | **18** | [`reports/audit-project-2.md`](reports/audit-project-2.md) |
+| 2 — ecommerce-api-legacy | JavaScript (Node 24) + Express 4.22.1 · Monolith · 3 arquivos · 3 rotas | 5 | 6 | 4 | 3 | **18** | [`reports/audit-project-2.md`](reports/audit-project-2.md) |
 | 3 — task-manager-api | Python 3.12 + Flask 3.0.0 + Flask-SQLAlchemy · Partial layering · 15 arquivos · 22 rotas | 5 | 9 | 17 | 12 | **43** | [`reports/audit-project-3.md`](reports/audit-project-3.md) |
 
 Cruzamento com a análise manual (seção 1): a Fase 2 encontrou **todos** os problemas listados manualmente nos 3 projetos (11/11, 13/13 e 11/11), sempre com `arquivo:linha`, e adicionou outros (ex.: `request.get_json()` sem `silent=True`, `flask-cors` desatualizado, `SELECT *`, falta de índices/UNIQUE). Os 3 relatórios incluem a seção `## Deprecated APIs` com equivalente moderno para cada uso.
@@ -272,8 +272,8 @@ login com hash MD5 legado -> 200; hash migrado para scrypt:32768... no primeiro 
 - **Node exigiu decisões específicas de plataforma** que o playbook previa: `asyncHandler` porque o Express 4 não propaga rejeições de promises; `scrypt` nativo do `crypto` para não adicionar dependências; wrapper promisificado sobre o `sqlite3` de callbacks; erros em texto puro para preservar o envelope original.
 - **Python exigiu cuidado com compatibilidade de dados:** `datetime.utcnow()` → helper que devolve UTC naive, para os strings serializados não ganharem `+00:00`; verificação de senha aceita scrypt, MD5 e texto puro e migra no login, para bancos antigos continuarem funcionando.
 - **Segurança vs. "endpoints originais respondem":** a skill manteve todas as rotas, inclusive `/admin/query`, mas atrás de `X-Admin-Token` e restrita a `SELECT`; listou cada mudança como *contract change (security-driven)*.
-- **Headless:** o gate funcionou nas 3 execuções (o turno 1 terminou exatamente na pergunta, sem tocar código). Na Fase 3 do projeto 2 a sessão aninhada foi cortada por limite de uso da API (HTTP 429) no meio da refatoração; bastou `claude -p --resume <session_id>` pedindo para concluir a Fase 3, e a skill re-leu as referências, terminou e validou. Isso reforça a decisão de instruir "on resume, re-read the reference files".
-- **Custo/tempo:** ~2–4 USD e 13–29 turnos por auditoria; ~2–7 USD e 39–55 turnos por refatoração+validação, com o modelo Fable 5.1.
+- **Headless:** o gate funcionou nas 3 execuções (o turno 1 terminou exatamente na pergunta, sem tocar código). Uma primeira tentativa no projeto 2 foi cortada por limite de uso da API (HTTP 429) no meio da Fase 3; a skill conseguiu retomar via `--resume` e terminar, mas, para que a entrega refletisse uma execução limpa, o projeto foi restaurado ao código original e a skill executada de novo do zero em sessão única (é essa execução que está commitada e nos logs).
+- **Custo/tempo:** ~2–4 USD e 13–29 turnos por auditoria; ~3–7 USD e 45–55 turnos por refatoração+validação, com o modelo Fable 5.1.
 
 ## 4. Como Executar
 

@@ -2,48 +2,37 @@
 
 const express = require('express');
 const config = require('./config');
+const database = require('./database');
 const logger = require('./utils/logger');
-const { initDatabase } = require('./database');
-const apiRoutes = require('./routes');
+const routes = require('./routes');
 const notFound = require('./middlewares/notFound');
 const errorHandler = require('./middlewares/errorHandler');
 
-/** Composition root: monta a aplicação sem subir o servidor (útil para testes). */
-function createApp() {
-  const app = express();
-  app.disable('x-powered-by');
-  app.use(express.json({ limit: config.jsonBodyLimit }));
+const app = express();
 
-  app.use('/api', apiRoutes);
-
-  app.use(notFound);
-  app.use(errorHandler);
-  return app;
-}
+app.use(express.json());
+app.use('/api', routes);
+app.use(notFound);
+app.use(errorHandler);
 
 async function start() {
-  for (const warning of config.insecureDefaultWarnings()) logger.warn(warning);
-
-  await initDatabase();
-  const app = createApp();
-
-  return new Promise((resolve) => {
-    const server = app.listen(config.port, config.host, () => {
-      logger.info(`LMS API rodando em http://${config.host}:${config.port} (${config.env})`);
-      resolve(server);
+    await database.init();
+    if (!config.adminToken) {
+        logger.warn('ADMIN_TOKEN não definido — rotas administrativas respondem 403');
+    }
+    return new Promise((resolve) => {
+        const server = app.listen(config.port, config.host, () => {
+            logger.info(`LMS API rodando em http://${config.host}:${config.port} (${config.env})`);
+            resolve(server);
+        });
     });
-  });
 }
-
-process.on('unhandledRejection', (reason) => {
-  logger.error('unhandledRejection', reason);
-});
 
 if (require.main === module) {
-  start().catch((err) => {
-    logger.error(`Falha ao iniciar a aplicação: ${err.message}`);
-    process.exit(1);
-  });
+    start().catch((err) => {
+        logger.error('Falha ao iniciar a aplicação:', err);
+        process.exit(1);
+    });
 }
 
-module.exports = { createApp, start };
+module.exports = { app, start };

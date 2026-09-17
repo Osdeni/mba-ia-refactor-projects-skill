@@ -1,69 +1,70 @@
 # ecommerce-api-legacy
 
 LMS API (com fluxo de checkout) em Node.js/Express usada como entrada do desafio `refactor-arch`.
-Refatorada para o padrão MVC: `config → database → models → services → controllers → routes`.
+Refatorada para MVC: `config → database → models → services → controllers → routes`, com
+tratamento de erro centralizado e configuração por variáveis de ambiente.
 
 ## Como rodar
 
 ```bash
 npm install
-npm start
+npm start          # node src/app.js
 ```
 
-A aplicação sobe em `http://localhost:3000`. O banco SQLite é em memória e já carrega seeds automaticamente no boot
-(usuário `leonan@fullcycle.com.br` / senha `123`, cursos "Clean Architecture" e "Docker", uma matrícula paga).
-
-Exemplos de requisições estão em `api.http`.
+A aplicação sobe em `http://localhost:3000` por padrão. O banco SQLite é em memória e já carrega os
+seeds automaticamente no boot (usuário `leonan@fullcycle.com.br` / senha `123`, cursos
+"Clean Architecture" e "Docker").
 
 ## Configuração (variáveis de ambiente)
 
-Todas as variáveis têm default — a aplicação sobe sem `.env`. Copie `.env.example` para `.env` para personalizar.
+Todas as variáveis têm default — a app sobe sem `.env`. Copie `.env.example` para `.env` ou
+exporte no shell:
 
 | Variável | Default | Descrição |
 |---|---|---|
-| `NODE_ENV` | `development` | Ambiente de execução |
-| `DEBUG` | `false` | `true` mostra stack trace no log e a mensagem original em erros 500 |
-| `HOST` | `0.0.0.0` | Interface de escuta |
-| `PORT` | `3000` | Porta HTTP |
-| `DB_FILE` | `:memory:` | Arquivo SQLite (`:memory:` recria banco + seeds a cada boot) |
-| `ADMIN_TOKEN` | *(vazio)* | Token do header `X-Admin-Token` para rotas administrativas; sem valor elas respondem 403 |
-| `PAYMENT_GATEWAY_KEY` | chave de teste | Chave do gateway de pagamento (nunca a chave live em dev) |
-| `LOG_LEVEL` | `info` | `error`, `warn`, `info` ou `debug` |
-| `JSON_BODY_LIMIT` | `100kb` | Tamanho máximo do corpo JSON |
+| `NODE_ENV` | `development` | ambiente |
+| `DEBUG` | `false` | `true` grava stack traces no log (nunca na resposta) |
+| `HOST` | `0.0.0.0` | interface do servidor |
+| `PORT` | `3000` | porta HTTP |
+| `DB_FILE` | `:memory:` | arquivo SQLite (`:memory:` recria e popula a cada boot) |
+| `ADMIN_TOKEN` | *(vazio)* | token exigido no header `X-Admin-Token` das rotas administrativas; vazio → 403 |
+| `PAYMENT_GATEWAY_KEY` | chave de dev | chave do gateway de pagamento |
+| `LOG_LEVEL` | `info` | `error` \| `warn` \| `info` \| `debug` |
 
 Exemplo:
 
 ```bash
-ADMIN_TOKEN=meu-token PORT=4000 npm start
+ADMIN_TOKEN=meu-token PORT=3000 npm start
 ```
 
 ## Endpoints
 
-| Método | Rota | Auth | Respostas |
+| Método | Rota | Auth | Sucesso |
 |---|---|---|---|
-| `POST` | `/api/checkout` | — | 200 `{msg, enrollment_id}` · 400 `Bad Request` / `Pagamento recusado` · 404 `Curso não encontrado` |
-| `GET` | `/api/admin/financial-report` | `X-Admin-Token` | 200 `[{course, revenue, students[{student, paid}]}]` · 401/403 |
-| `DELETE` | `/api/users/:id` | `X-Admin-Token` | 200 `Usuário deletado` · 404 `Usuário não encontrado` · 401/403 |
+| POST | `/api/checkout` | — | `200 {"msg":"Sucesso","enrollment_id":N}` |
+| GET | `/api/admin/financial-report` | `X-Admin-Token` | `200 [{course, revenue, students:[{student, paid}]}]` |
+| DELETE | `/api/users/:id` | `X-Admin-Token` | `200 "Usuário deletado"` (matrículas e pagamentos removidos em cascata) |
 
-Corpo do checkout: `{ "usr", "eml", "pwd", "c_id", "card" }`. Cartões iniciados por `4` são aprovados (gateway simulado).
-`pwd` é obrigatório apenas quando o e-mail ainda não existe (novos usuários não recebem mais senha padrão).
-Erros são devolvidos em texto puro; falhas internas respondem `500 Erro interno`.
+Erros são texto puro: `400 Bad Request` / `400 Pagamento recusado` / `404 Curso não encontrado` /
+`404 Usuário não encontrado` / `401`/`403` nas rotas administrativas / `404 Not Found`.
+
+Exemplos de requisições estão em `api.http`.
 
 ## Estrutura
 
 ```
 src/
-├── app.js            # composition root (createApp + start)
-├── config/           # variáveis de ambiente com defaults seguros
-├── database/         # conexão sqlite3 promisificada, schema (FK/cascade), seeds
-├── errors/           # AppError e subclasses (400/401/403/404)
-├── middlewares/      # asyncHandler, errorHandler, notFound, requireAdmin
-├── models/           # persistência por entidade (queries parametrizadas)
-├── services/         # checkout (transação), gateway de pagamento, relatório (JOIN)
-├── controllers/      # parse → validate → service → respond
-├── routes/           # mapeamento URL → controller
-├── validators/       # validação de entrada
-└── utils/            # logger com mascaramento, constantes, hashing scrypt
+  app.js            # composition root (express.json, rotas, 404, errorHandler, listen)
+  config/           # variáveis de ambiente com defaults seguros
+  database/         # conexão SQLite promisificada, schema (FK + cascade), seeds, transação
+  models/           # persistência por entidade (queries parametrizadas)
+  services/         # casos de uso: checkout (transacional), gateway de pagamento, relatório
+  controllers/      # parse → validar → serviço → resposta
+  routes/           # mapeamento URL → controller (express.Router)
+  middlewares/      # asyncHandler, errorHandler, notFound, requireAdmin
+  validators/       # validação de entrada com as mensagens originais
+  errors/           # AppError e subclasses
+  utils/            # constants, crypto (scrypt), logger
 ```
 
-Caminho de upgrade: Express 5 propaga erros de handlers async nativamente, dispensando o `asyncHandler`.
+Caminho de upgrade: Express 5 propaga erros assíncronos nativamente e dispensa o `asyncHandler`.

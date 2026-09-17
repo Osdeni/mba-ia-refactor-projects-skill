@@ -38,13 +38,14 @@ Legenda: `[ ]` pendente · `[x]` concluído · `Tentativas: N`
 - [x] Checklist de validação do projeto 1 preenchido (abaixo)
 - [x] Commit `refactor(code-smells-project): aplica MVC via skill refactor-arch + relatório 1`
 
-## Etapa 4 — Execução no Projeto 2: ecommerce-api-legacy (Tentativas: 2)
+## Etapa 4 — Execução no Projeto 2: ecommerce-api-legacy (Tentativas: 3)
 - [x] Copiar `.claude/skills/refactor-arch/` para o projeto
 - [x] Rodar `/refactor-arch` — 3 fases executam (Node/Express detectado)
 - [x] Aplicação inicia e os 3 endpoints respondem (smoke test, log salvo)
 - [x] Relatório salvo em `reports/audit-project-2.md`
 - [x] Checklist de validação do projeto 2 preenchido
 - [x] Commit `refactor(ecommerce-api-legacy): aplica MVC via skill refactor-arch + relatório 2`
+- [x] Re-execução do zero em sessão única (a 1ª execução completa havia sido interrompida por HTTP 429 e retomada); validação independente refeita
 
 ## Etapa 5 — Execução no Projeto 3: task-manager-api (Tentativas: 1)
 - [x] Copiar `.claude/skills/refactor-arch/` para o projeto

@@ -1,12 +1,12 @@
 'use strict';
 
+const connection = require('./connection');
 const schema = require('./schema');
 const seed = require('./seed');
 
-/** Cria o schema e popula os seeds quando o banco está vazio. */
-async function initDatabase() {
-  await schema.createTables();
-  return seed.runIfEmpty();
+async function init() {
+    await schema.createTables();
+    return seed.runIfEmpty();
 }
 
-module.exports = { initDatabase };
+module.exports = { ...connection, init };
