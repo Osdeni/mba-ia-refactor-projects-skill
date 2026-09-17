@@ -66,7 +66,7 @@ Legenda: `[ ]` pendente · `[x]` concluído · `Tentativas: N`
 ## Etapa 7 — Entrega (Tentativas: 1)
 - [x] `git status` limpo; `reports/audit-project-{1,2,3}.md` presentes
 - [x] `git push origin main` e conferência da árvore no GitHub
-- [ ] Enviar URL do fork na plataforma (somente após autorização do usuário)
+- [x] Enviar URL do fork na plataforma (enviado em 17/09/2026 12:21 — "Desafio Enviado")
 
 ---
 
