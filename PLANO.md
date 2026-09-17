@@ -62,8 +62,8 @@ Legenda: `[ ]` pendente · `[x]` concluído · `Tentativas: N`
 - [x] As 3 cópias da skill idênticas (`diff -r`)
 - [x] Commit `docs: README com construção da skill, resultados e como executar`
 
-## Etapa 7 — Entrega (Tentativas: 0)
-- [ ] `git status` limpo; `reports/audit-project-{1,2,3}.md` presentes
+## Etapa 7 — Entrega (Tentativas: 1)
+- [x] `git status` limpo; `reports/audit-project-{1,2,3}.md` presentes
 - [ ] `git push origin main` e conferência da árvore no GitHub
 - [ ] Enviar URL do fork na plataforma (somente após autorização do usuário)
 
