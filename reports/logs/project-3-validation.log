@@ -1,0 +1,79 @@
+# Validação independente — Projeto 3 (task-manager-api)
+
+## Baseline (app original, antes da refatoração)
+```
+== smoke task-manager-api @ http://127.0.0.1:5060 ==
+GET    /                                        200  ['message', 'version']
+GET    /health                                  200  ['status', 'timestamp']
+GET    /tasks                                   200  array[10]
+GET    /tasks/1                                 200  ['category_id', 'created_at', 'description', 'due_date', 'id', 'overdue', 'priority', 'status', 'tags', 'title', 'updated_at', 'user_id']
+GET    /tasks/stats                             200  ['cancelled', 'completion_rate', 'done', 'in_progress', 'overdue', 'pending', 'total']
+GET    /tasks/search?q=JWT&status=pending       200  array[1]
+GET    /users                                   200  array[3]
+GET    /users/1                                 200  ['active', 'created_at', 'email', 'id', 'name', 'password', 'role', 'tasks']
+GET    /users/1/tasks                           200  array[4]
+GET    /categories                              200  array[4]
+GET    /reports/summary                         200  ['generated_at', 'overdue', 'overview', 'recent_activity', 'tasks_by_priority', 'tasks_by_status', 'user_productivity']
+GET    /reports/user/1                          200  ['statistics', 'user']
+POST   /login                                   200  ['message', 'token', 'user']
+POST   /tasks                                   201  ['category_id', 'created_at', 'description', 'due_date', 'id', 'priority', 'status', 'tags', 'title', 'updated_at', 'user_id']
+PUT    /tasks/11                                200  ['category_id', 'created_at', 'description', 'due_date', 'id', 'priority', 'status', 'tags', 'title', 'updated_at', 'user_id']
+DELETE /tasks/11                                200  ['message']
+POST   /users                                   201  ['active', 'created_at', 'email', 'id', 'name', 'password', 'role']
+PUT    /users/4                                 200  ['active', 'created_at', 'email', 'id', 'name', 'password', 'role']
+POST   /categories                              201  ['color', 'created_at', 'description', 'id', 'name']
+PUT    /categories/5                            200  ['color', 'created_at', 'description', 'id', 'name']
+DELETE /categories/5                            200  ['message']
+DELETE /users/4                                 200  ['message']
+-- probes (devem ser 4xx, nunca 500) --
+POST   /tasks                                   500  text:<!doctype html> <html lang=en> <title>500 Internal Server Er
+GET    /tasks/search?priority=abc               500  text:<!doctype html> <html lang=en> <title>500 Internal Server Er
+PUT    /tasks/1                                 500  text:<!doctype html> <html lang=en> <title>500 Internal Server Er
+PUT    /categories/1                            415  text:<!doctype html> <html lang=en> <title>415 Unsupported Media 
+GET    /nope                                    404  text:<!doctype html> <html lang=en> <title>404 Not Found</title> 
+-- hash de senha exposto? --
+ocorrencias de "password": 1
+```
+
+## Após refatoração (app refatorado pela skill, ADMIN_TOKEN=validation-token)
+```
+boot: SECRET_KEY padrão de desenvolvimento em uso — defina SECRET_KEY no ambiente
+== smoke task-manager-api @ http://127.0.0.1:5060 ==
+GET    /                                        200  ['message', 'version']
+GET    /health                                  200  ['status', 'timestamp']
+GET    /tasks                                   200  array[10]
+GET    /tasks/1                                 200  ['category_id', 'created_at', 'description', 'due_date', 'id', 'overdue', 'priority', 'status', 'tags', 'title', 'updated_at', 'user_id']
+GET    /tasks/stats                             200  ['cancelled', 'completion_rate', 'done', 'in_progress', 'overdue', 'pending', 'total']
+GET    /tasks/search?q=JWT&status=pending       200  array[1]
+GET    /users                                   200  array[3]
+GET    /users/1                                 200  ['active', 'created_at', 'email', 'id', 'name', 'role', 'tasks']
+GET    /users/1/tasks                           200  array[4]
+GET    /categories                              200  array[4]
+GET    /reports/summary                         200  ['generated_at', 'overdue', 'overview', 'recent_activity', 'tasks_by_priority', 'tasks_by_status', 'user_productivity']
+GET    /reports/user/1                          200  ['statistics', 'user']
+POST   /login                                   200  ['message', 'token', 'user']
+POST   /tasks                                   201  ['category_id', 'created_at', 'description', 'due_date', 'id', 'priority', 'status', 'tags', 'title', 'updated_at', 'user_id']
+PUT    /tasks/11                                200  ['category_id', 'created_at', 'description', 'due_date', 'id', 'priority', 'status', 'tags', 'title', 'updated_at', 'user_id']
+DELETE /tasks/11                                200  ['message']
+POST   /users                                   201  ['active', 'created_at', 'email', 'id', 'name', 'role']
+PUT    /users/4                                 200  ['active', 'created_at', 'email', 'id', 'name', 'role']
+POST   /categories                              201  ['color', 'created_at', 'description', 'id', 'name']
+PUT    /categories/5                            200  ['color', 'created_at', 'description', 'id', 'name']
+DELETE /categories/5                            200  ['message']
+DELETE /users/4                                 200  ['message']
+-- probes (devem ser 4xx, nunca 500) --
+POST   /tasks                                   201  ['category_id', 'created_at', 'description', 'due_date', 'id', 'priority', 'status', 'tags', 'title', 'updated_at', 'user_id']
+GET    /tasks/search?priority=abc               400  ['error']
+PUT    /tasks/1                                 400  ['error']
+PUT    /categories/1                            400  ['error']
+GET    /nope                                    404  ['error']
+-- hash de senha exposto? --
+ocorrencias de "password": 0
+DELETE /users/3 sem token -> 401
+GET /health após os probes -> 200 (app viva)
+
+Banco legado com hash MD5 (usuário legado@email.com / 1234):
+  hash antes : 81dc9bdb52d0... (md5)
+  POST /login -> 200
+  hash depois: scrypt:32768... (migrado no primeiro login)
+```

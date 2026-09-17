@@ -48,12 +48,12 @@ Legenda: `[ ]` pendente · `[x]` concluído · `Tentativas: N`
 
 ## Etapa 5 — Execução no Projeto 3: task-manager-api (Tentativas: 1)
 - [x] Copiar `.claude/skills/refactor-arch/` para o projeto
-- [ ] Rodar `/refactor-arch` — Fase 1 detecta Python/Flask + domínio Task Manager
-- [ ] Fase 2 identifica problemas no projeto parcialmente organizado
-- [ ] Fase 3 melhora a estrutura sem quebrar; todos os endpoints respondem (smoke test, log salvo)
-- [ ] Relatório salvo em `reports/audit-project-3.md`
-- [ ] Checklist de validação do projeto 3 preenchido
-- [ ] Commit `refactor(task-manager-api): aplica MVC via skill refactor-arch + relatório 3`
+- [x] Rodar `/refactor-arch` — Fase 1 detecta Python/Flask + domínio Task Manager
+- [x] Fase 2 identifica problemas no projeto parcialmente organizado
+- [x] Fase 3 melhora a estrutura sem quebrar; todos os endpoints respondem (smoke test, log salvo)
+- [x] Relatório salvo em `reports/audit-project-3.md`
+- [x] Checklist de validação do projeto 3 preenchido
+- [x] Commit `refactor(task-manager-api): aplica MVC via skill refactor-arch + relatório 3`
 
 ## Etapa 6 — README final (Tentativas: 0)
 - [ ] Seção B "Construção da Skill"
@@ -121,34 +121,34 @@ Legenda: `[ ]` pendente · `[x]` concluído · `Tentativas: N`
 
 ### Projeto 3 — task-manager-api
 #### Fase 1 — Análise
-- [ ] Linguagem detectada corretamente
-- [ ] Framework detectado corretamente
-- [ ] Domínio da aplicação descrito corretamente
-- [ ] Número de arquivos analisados condiz com a realidade
+- [x] Linguagem detectada corretamente
+- [x] Framework detectado corretamente
+- [x] Domínio da aplicação descrito corretamente
+- [x] Número de arquivos analisados condiz com a realidade
 #### Fase 2 — Auditoria
-- [ ] Relatório segue o template definido nos arquivos de referência
-- [ ] Cada finding tem arquivo e linhas exatos
-- [ ] Findings ordenados por severidade (CRITICAL → LOW)
-- [ ] Mínimo de 5 findings identificados
-- [ ] Detecção de APIs deprecated incluída (se aplicável)
-- [ ] Skill pausa e pede confirmação antes da Fase 3
+- [x] Relatório segue o template definido nos arquivos de referência
+- [x] Cada finding tem arquivo e linhas exatos
+- [x] Findings ordenados por severidade (CRITICAL → LOW)
+- [x] Mínimo de 5 findings identificados
+- [x] Detecção de APIs deprecated incluída (se aplicável)
+- [x] Skill pausa e pede confirmação antes da Fase 3
 #### Fase 3 — Refatoração
-- [ ] Estrutura de diretórios segue padrão MVC
-- [ ] Configuração extraída para módulo de config (sem hardcoded)
-- [ ] Models criados para abstrair dados
-- [ ] Views/Routes separadas para visualização ou roteamento
-- [ ] Controllers concentram o fluxo da aplicação
-- [ ] Error handling centralizado
-- [ ] Entry point claro
+- [x] Estrutura de diretórios segue padrão MVC
+- [x] Configuração extraída para módulo de config (sem hardcoded)
+- [x] Models criados para abstrair dados
+- [x] Views/Routes separadas para visualização ou roteamento
+- [x] Controllers concentram o fluxo da aplicação
+- [x] Error handling centralizado
+- [x] Entry point claro
 - [x] Aplicação inicia sem erros
-- [ ] Endpoints originais respondem corretamente
+- [x] Endpoints originais respondem corretamente
 
 ---
 
 ## Critérios de Aceite (3/3 projetos)
 | Critério | P1 | P2 | P3 |
 |---|---|---|---|
-| Fase 1 detecta stack corretamente | [x] | [x] | [ ] |
-| Fase 2 encontra >= 5 findings | [x] | [x] | [ ] |
-| Fase 2 inclui pelo menos 1 CRITICAL ou HIGH | [x] | [x] | [ ] |
-| Fase 3 aplicação funciona após refatoração | [x] | [x] | [ ] |
+| Fase 1 detecta stack corretamente | [x] | [x] | [x] |
+| Fase 2 encontra >= 5 findings | [x] | [x] | [x] |
+| Fase 2 inclui pelo menos 1 CRITICAL ou HIGH | [x] | [x] | [x] |
+| Fase 3 aplicação funciona após refatoração | [x] | [x] | [x] |

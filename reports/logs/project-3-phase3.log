@@ -1,0 +1,108 @@
+```
+================================
+PHASE 3: REFACTORING COMPLETE
+================================
+## New Project Structure
+task-manager-api/
+├── app.py                          # create_app() + app = create_app(); `python app.py` mantido
+├── config/
+│   ├── __init__.py
+│   └── settings.py                 # env vars com defaults seguros (SECRET_KEY, DEBUG, HOST, PORT, DATABASE_URL, ADMIN_TOKEN, CORS_ORIGINS, SMTP_*)
+├── .env.example
+├── .gitignore
+├── database.py                     # db = SQLAlchemy() + PRAGMA foreign_keys + init_app (create_all fora do import)
+├── errors.py                       # AppError, ValidationError, UnauthorizedError, ForbiddenError, NotFoundError, ConflictError
+├── middlewares/
+│   ├── __init__.py
+│   ├── auth.py                     # check_admin / require_admin (X-Admin-Token)
+│   └── error_handler.py            # envelope {"error": ...} para AppError, IntegrityError, HTTPException, Exception
+├── models/
+│   ├── __init__.py
+│   ├── user.py                     # scrypt + verify-and-upgrade de MD5, to_dict whitelist, cascade tasks
+│   ├── task.py                     # is_overdue, overdue_clause, to_dict(with_overdue/with_names), search, agregações
+│   └── category.py                 # delete anula category_id das tasks
+├── validators/
+│   ├── __init__.py
+│   ├── user_validator.py
+│   ├── task_validator.py
+│   └── category_validator.py
+├── services/
+│   ├── __init__.py
+│   ├── auth_service.py             # login + token assinado (itsdangerous)
+│   ├── task_service.py             # checa FKs (404) + persiste + notifica atribuição
+│   ├── report_service.py           # summary / user_report via GROUP BY
+│   └── notification_service.py     # gateway SMTP config-driven (sem SMTP_HOST só loga)
+├── controllers/
+│   ├── __init__.py
+│   ├── health_controller.py
+│   ├── user_controller.py
+│   ├── task_controller.py
+│   ├── category_controller.py
+│   └── report_controller.py
+├── routes/
+│   ├── __init__.py                 # register_blueprints(app)
+│   ├── health_routes.py
+│   ├── user_routes.py
+│   ├── task_routes.py
+│   ├── category_routes.py          # extraído de report_routes.py
+│   └── report_routes.py
+├── utils/
+│   ├── __init__.py
+│   ├── constants.py
+│   ├── dates.py                    # utcnow() naive UTC, parse_date, format_date
+│   └── logger.py
+├── seed.py                         # mesmos dados e credenciais; hashes scrypt
+├── requirements.txt                # flask, flask-sqlalchemy, flask-cors 6.0.1, python-dotenv
+└── README.md
+Removidos: utils/helpers.py (código morto). Reescrito: services/notification_service.py (credenciais SMTP saíram do código).
+
+## Validation
+  ✓ Application boots without errors (port 5000, 1.0s) — também sem nenhuma variável de ambiente
+  ✓ All endpoints respond correctly (22/22 — see table)
+  ✓ Zero CRITICAL/HIGH anti-patterns remaining (2 LOW accepted: `hashlib.md5` em models/user.py:60 apenas para verificar e migrar hashes legados com `usedforsecurity=False`; `utcnow()` restante é o helper próprio de utils/dates.py, não `datetime.utcnow()`)
+  ✓ Banco legado (hashes MD5 do seed original) continua logando; hashes migrados para scrypt no primeiro login
+  ✓ Seed novo funciona (`python seed.py`), `from app import app, db` preservado
+  ✓ py_compile de todos os módulos OK; nenhum import obsoleto (helpers/NotificationService/Model.query)
+
+## Endpoint check
+| METHOD | PATH | baseline | after | keys match |
+|---|---|---|---|---|
+| GET | / | 200 [message, version] | 200 [message, version] | yes |
+| GET | /health | 200 [status, timestamp] | 200 [status, timestamp] | yes |
+| GET | /users | 200 array[3] | 200 array[3] | yes |
+| GET | /users/<id> | 200 [active, created_at, email, id, name, password, role, tasks] | 200 [active, created_at, email, id, name, role, tasks] | yes (password removido) |
+| GET | /users/<id>/tasks | 200 array[4] | 200 array[4] | yes |
+| GET | /tasks | 200 array[10] | 200 array[10] | yes |
+| GET | /tasks/<id> | 200 [category_id, created_at, description, due_date, id, overdue, priority, status, tags, title, updated_at, user_id] | 200 idem | yes |
+| GET | /tasks/search?q=bug&status=pending&priority=1&user_id=1 | 200 array[1] | 200 array[1] | yes |
+| GET | /tasks/stats | 200 [cancelled, completion_rate, done, in_progress, overdue, pending, total] | 200 idem | yes |
+| GET | /categories | 200 array[4] | 200 array[4] | yes |
+| GET | /reports/summary | 200 [generated_at, overdue, overview, recent_activity, tasks_by_priority, tasks_by_status, user_productivity] | 200 idem | yes |
+| GET | /reports/user/<id> | 200 [statistics, user] | 200 [statistics, user] | yes |
+| POST | /users | 201 [active, created_at, email, id, name, password, role] | 201 [active, created_at, email, id, name, role] | yes (password removido) |
+| POST | /login | 200 [message, token, user] | 200 [message, token, user] | yes (user sem password) |
+| POST | /categories | 201 [color, created_at, description, id, name] | 201 idem | yes |
+| POST | /tasks | 201 [category_id, created_at, description, due_date, id, priority, status, tags, title, updated_at, user_id] | 201 idem | yes |
+| PUT | /users/<id> | 200 [active, created_at, email, id, name, password, role] | 200 [active, created_at, email, id, name, role] | yes (password removido) |
+| PUT | /tasks/<id> | 200 [task fields] | 200 [task fields] | yes |
+| PUT | /categories/<id> | 200 [color, created_at, description, id, name] | 200 idem | yes |
+| DELETE | /tasks/<id> | 200 [message] | 200 [message] | yes |
+| DELETE | /categories/<id> | 200 [message] | 200 [message] | yes |
+| DELETE | /users/<id> | 200 [message] | 200 [message] com X-Admin-Token; 401 token errado; 403 sem ADMIN_TOKEN | yes |
+
+Sondas de falha (antes → depois): `GET /users/9999` 404 → 404; `GET /tasks/9999` 404 → 404; `POST /users {}` 400 → 400; `POST /tasks {"title":"ab"}` 400 → 400; `POST /tasks {"priority":"2"}` **500 → 201** (string numérica coagida); `PUT /categories/1` sem body **415 HTML → 400 {error}**; `GET /tasks/search?priority=abc` **500 → 400**; `POST /login` senha errada 401 → 401; `GET /nao-existe` **404 HTML → 404 {error}**; `/health` após as falhas 200 (app viva). Apagar categoria com task vinculada deixa `category_id: null` (verificado).
+
+## Contract changes (security-driven)
+- GET /users/<id>, POST /users, PUT /users/<id>, POST /login (objeto `user`): chave `password` (hash) removida das respostas (AP-05).
+- POST /login: `token` passa a ser assinado com SECRET_KEY via itsdangerous (validade `TOKEN_MAX_AGE`) em vez de `fake-jwt-token-<id>`; mesma chave (AP-06).
+- DELETE /users/<id>: exige header `X-Admin-Token` igual a `ADMIN_TOKEN` (401 token inválido, 403 quando `ADMIN_TOKEN` não está configurado) (AP-06).
+- POST /users com `role` diferente de `user` e PUT /users/<id> alterando `role` ou `active`: exigem `X-Admin-Token` (401/403 como acima); demais campos seguem públicos (AP-06).
+- Erros de cliente que antes davam 500/415 em HTML agora respondem 400 JSON `{error}`; rota inexistente responde 404 JSON `{error}` (AP-09/AP-15).
+- Validação adicional: `color` de categoria deve ser `#RRGGBB` e `active` deve ser booleano, ambos 400 (antes qualquer valor era aceito) (AP-15).
+- DEBUG default `false`, HOST default `127.0.0.1` (antes `0.0.0.0` com debug ligado); CORS continua `*` por default, configurável (AP-10).
+
+## Next steps
+- Review the diff and commit the refactored code
+- Report kept at ../reports/audit-project-3.md
+================================
+```

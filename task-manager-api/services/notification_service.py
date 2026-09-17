@@ -1,48 +1,56 @@
+"""Gateway de notificação por e-mail, configurado por ambiente (SMTP_*).
+
+Sem `SMTP_HOST` configurado, as notificações são apenas registradas no log — a app nunca
+tenta abrir conexão de rede por padrão e nenhuma credencial vive no código.
+"""
 import smtplib
-from datetime import datetime
+from email.message import EmailMessage
 
-class NotificationService:
-    def __init__(self):
-        self.notifications = []
-        self.email_host = 'smtp.gmail.com'
-        self.email_port = 587
-        self.email_user = 'taskmanager@gmail.com'
-        self.email_password = 'senha123'
+from config import settings
+from utils.logger import get_logger
 
-    def send_email(self, to, subject, body):
-        try:
+logger = get_logger(__name__)
 
-            server = smtplib.SMTP(self.email_host, self.email_port)
+
+def is_configured():
+    return bool(settings.SMTP_HOST)
+
+
+def send_email(to, subject, body):
+    """True quando o e-mail foi entregue ao servidor SMTP; False caso contrário (nunca levanta)."""
+    if not is_configured():
+        logger.info("SMTP não configurado — notificação para %s ignorada (%s)", to, subject)
+        return False
+
+    message = EmailMessage()
+    message["From"] = settings.SMTP_FROM
+    message["To"] = to
+    message["Subject"] = subject
+    message.set_content(body)
+
+    try:
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
             server.starttls()
-            server.login(self.email_user, self.email_password)
-            message = f"Subject: {subject}\n\n{body}"
-            server.sendmail(self.email_user, to, message)
-            server.quit()
-            print(f"Email enviado para {to}")
-            return True
-        except Exception as e:
-            print(f"Erro ao enviar email: {str(e)}")
-            return False
+            if settings.SMTP_USER and settings.SMTP_PASSWORD:
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.send_message(message)
+        logger.info("Email enviado para %s", to)
+        return True
+    except (smtplib.SMTPException, OSError) as error:
+        logger.error("Erro ao enviar email para %s: %s", to, error.__class__.__name__)
+        return False
 
-    def notify_task_assigned(self, user, task):
-        subject = f"Nova task atribuída: {task.title}"
-        body = f"Olá {user.name},\n\nA task '{task.title}' foi atribuída a você.\n\nPrioridade: {task.priority}\nStatus: {task.status}"
-        self.send_email(user.email, subject, body)
-        self.notifications.append({
-            'type': 'task_assigned',
-            'user_id': user.id,
-            'task_id': task.id,
-            'timestamp': datetime.utcnow()
-        })
 
-    def notify_task_overdue(self, user, task):
-        subject = f"Task atrasada: {task.title}"
-        body = f"Olá {user.name},\n\nA task '{task.title}' está atrasada!\n\nData limite: {task.due_date}"
-        self.send_email(user.email, subject, body)
+def notify_task_assigned(user, task):
+    subject = f"Nova task atribuída: {task.title}"
+    body = (
+        f"Olá {user.name},\n\nA task '{task.title}' foi atribuída a você.\n\n"
+        f"Prioridade: {task.priority}\nStatus: {task.status}"
+    )
+    return send_email(user.email, subject, body)
 
-    def get_notifications(self, user_id):
-        result = []
-        for n in self.notifications:
-            if n['user_id'] == user_id:
-                result.append(n)
-        return result
+
+def notify_task_overdue(user, task):
+    subject = f"Task atrasada: {task.title}"
+    body = f"Olá {user.name},\n\nA task '{task.title}' está atrasada!\n\nData limite: {task.due_date}"
+    return send_email(user.email, subject, body)
