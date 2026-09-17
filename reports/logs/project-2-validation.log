@@ -1,0 +1,44 @@
+# Validação independente — Projeto 2 (ecommerce-api-legacy)
+
+## Baseline (app original, antes da refatoração)
+```
+== smoke ecommerce-api-legacy @ http://127.0.0.1:3000 ==
+POST   /api/checkout                    200  ['enrollment_id', 'msg']
+POST   /api/checkout                    400  text:Pagamento recusado 
+POST   /api/checkout                    400  text:Bad Request 
+POST   /api/checkout                    404  text:Curso não encontrado 
+GET    /api/admin/financial-report      200  array[2]
+-- destrutivo por último --
+DELETE /api/users/1                     200  text:Usuário deletado, mas as matrículas e pagamentos ficaram sujos no banc
+GET    /api/admin/financial-report      200  array[2]
+-- probes (nunca 500 / nunca derrubar o processo) --
+POST   /api/checkout                    000  text: 
+POST   /api/checkout                    000  text: 
+GET    /api/nope                        000  text: 
+-- processo ainda vivo? --
+alive=000
+(status 000 = o processo Node morreu no probe de cartão numérico — TypeError não tratado)
+```
+
+## Após refatoração (app refatorado pela skill, ADMIN_TOKEN=validation-token)
+```
+boot: 2026-09-17T04:04:51.229Z WARN PAYMENT_GATEWAY_KEY não definida — usando chave de desenvolvimento
+2026-09-17T04:04:51.330Z INFO LMS API rodando em http://0.0.0.0:3000 (development)
+== smoke ecommerce-api-legacy @ http://127.0.0.1:3000 ==
+POST   /api/checkout                    200  ['enrollment_id', 'msg']
+POST   /api/checkout                    400  text:Pagamento recusado 
+POST   /api/checkout                    400  text:Bad Request 
+POST   /api/checkout                    404  text:Curso não encontrado 
+GET    /api/admin/financial-report      200  array[2]
+-- destrutivo por último --
+DELETE /api/users/1                     200  text:Usuário deletado 
+GET    /api/admin/financial-report      200  array[2]
+-- probes (nunca 500 / nunca derrubar o processo) --
+POST   /api/checkout                    400  text:Bad Request 
+POST   /api/checkout                    400  text:Bad Request 
+GET    /api/nope                        404  text:Not Found 
+-- processo ainda vivo? --
+alive=200
+GET /api/admin/financial-report sem token -> 401
+número do cartão no log do servidor: 0 ocorrências (mascarado como ****4444)
+```

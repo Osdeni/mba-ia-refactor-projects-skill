@@ -1,0 +1,89 @@
+Validação completa e limpa. O bloqueio do boot era um `TypeError` em `src/config/index.js` (atribuição de propriedade em objeto `Object.freeze` sob `'use strict'`), corrigido movendo a função para dentro do objeto congelado. Servidor encerrado, PID/log removidos.
+
+```
+================================
+PHASE 3: REFACTORING COMPLETE
+================================
+## New Project Structure
+ecommerce-api-legacy/
+├── .env.example
+├── .gitignore
+├── README.md                      # seção de configuração/env vars + endpoints atualizada
+├── api.http                       # inclui X-Admin-Token nas rotas protegidas
+├── package.json                   # npm start → node src/app.js (inalterado)
+├── package-lock.json
+└── src/
+    ├── app.js                     # composition root: createApp() + start(); listen só se require.main
+    ├── config/index.js            # process.env com defaults seguros, Object.freeze
+    ├── database/
+    │   ├── connection.js          # sqlite3 promisificado (run/get/all/exec) + withTransaction serializado + PRAGMA foreign_keys
+    │   ├── schema.js              # CREATE TABLE com NOT NULL / UNIQUE(email) / FK ON DELETE CASCADE / CHECK
+    │   ├── seed.js                # mesmos seeds; senha do usuário seed com hash scrypt
+    │   └── index.js               # initDatabase()
+    ├── errors/AppError.js         # AppError, ValidationError, PaymentDeniedError, UnauthorizedError, ForbiddenError, NotFoundError
+    ├── middlewares/
+    │   ├── asyncHandler.js
+    │   ├── errorHandler.js        # handler central (envelope texto puro mantido), JSON inválido → 400, 500 sem detalhes
+    │   ├── notFound.js
+    │   └── requireAdmin.js        # X-Admin-Token vs ADMIN_TOKEN (timingSafeEqual); 403 sem token configurado
+    ├── models/
+    │   ├── userModel.js           # findByEmail, create (scrypt), verifyCredentials (verify-and-upgrade), deleteById
+    │   ├── courseModel.js
+    │   ├── enrollmentModel.js
+    │   ├── paymentModel.js
+    │   └── auditLogModel.js
+    ├── services/
+    │   ├── paymentGateway.js      # regra do prefixo "4"; log com cartão mascarado, chave nunca logada
+    │   ├── checkoutService.js     # curso → usuário → cobrança → transação (matrícula + pagamento + auditoria)
+    │   └── reportService.js       # relatório em 1 query com LEFT JOIN (sem N+1)
+    ├── controllers/
+    │   ├── checkoutController.js
+    │   ├── adminController.js
+    │   └── userController.js
+    ├── routes/
+    │   ├── index.js               # monta /api
+    │   ├── checkoutRoutes.js      # POST /checkout
+    │   ├── adminRoutes.js         # GET /admin/financial-report (requireAdmin)
+    │   └── userRoutes.js          # DELETE /users/:id (requireAdmin)
+    ├── validators/checkoutValidator.js
+    └── utils/
+        ├── constants.js           # PAYMENT_STATUS, CARD_APPROVED_PREFIX, MESSAGES
+        ├── crypto.js              # hashPassword / verifyPassword (scrypt + legado)
+        └── logger.js              # logger com níveis (LOG_LEVEL) + maskCard
+Removidos: src/AppManager.js, src/utils.js (grep de imports obsoletos: nenhum)
+
+## Validation
+  ✓ Application boots without errors (port 3000, 1.03s) — também sobe sem nenhuma variável de ambiente
+  ✓ All endpoints respond correctly (3/3 rotas do contrato — see table; 20/20 chamadas incl. probes)
+  ✓ Zero CRITICAL/HIGH anti-patterns remaining (3 LOW accepted: senha do usuário seed `'123'` em database/seed.js:8 (credencial seed exigida pelo contrato, gravada com hash); `console.log/error` apenas dentro de utils/logger.js; laço de 2 INSERTs de cursos na seed)
+  ✓ node --check em 30 arquivos: sem erros
+
+## Endpoint check
+| METHOD | PATH | baseline | after | keys match |
+|---|---|---|---|---|
+| GET | /api/admin/financial-report (sem token) | 200 array[2] | 401 text | guarded (allowed deviation) |
+| GET | /api/admin/financial-report (X-Admin-Token) | 200 array[2] `[{course,revenue,students[{student,paid}]}]` | 200 array[2] mesmo shape | yes |
+| POST | /api/checkout (sucesso) | 200 [enrollment_id, msg] | 200 [enrollment_id, msg] | yes |
+| POST | /api/checkout (cartão 5xxx) | 400 "Pagamento recusado" | 400 "Pagamento recusado" | yes |
+| POST | /api/checkout (c_id 99) | 404 "Curso não encontrado" | 404 "Curso não encontrado" | yes |
+| POST | /api/checkout (campos faltando / `{}`) | 400 "Bad Request" | 400 "Bad Request" | yes |
+| POST | /api/checkout (card numérico) | **crash do processo** (TypeError) | 400 "Bad Request", processo vivo | fixed |
+| POST | /api/checkout (JSON inválido) | 400 HTML do Express | 400 "Bad Request" | status yes |
+| POST | /api/checkout (e-mail existente, sem pwd) | 200 | 200 [enrollment_id, msg] | yes |
+| DELETE | /api/users/1 (sem token) | 200 text | 401 text | guarded (allowed deviation) |
+| DELETE | /api/users/1 (X-Admin-Token) | 200 "Usuário deletado, mas as matrículas e pagamentos ficaram sujos…" | 200 "Usuário deletado" (cascata remove matrículas/pagamentos) | status yes |
+| DELETE | /api/users/999 | 200 text | 404 "Usuário não encontrado" | security-driven |
+| GET | /nope | 404 HTML | 404 "Not Found" | status yes |
+
+## Contract changes (security-driven)
+- GET /api/admin/financial-report: exige header `X-Admin-Token` (401 token errado, 403 quando `ADMIN_TOKEN` não está definido no ambiente)
+- DELETE /api/users/:id: exige `X-Admin-Token`; responde 404 quando o usuário não existe e 400 para id não numérico (antes 200 incondicional); matrículas e pagamentos do usuário são removidos em cascata (mensagem de sucesso simplificada, status 200 mantido)
+- POST /api/checkout: `pwd` passa a ser obrigatório apenas ao criar um usuário novo (400 "Bad Request" em vez de atribuir a senha padrão "123456"); `card` não-string, `c_id` não inteiro e e-mail malformado respondem 400 (antes crash ou 404)
+- Logs: número do cartão mascarado (`****4444`) e chave do gateway nunca é escrita; senhas armazenadas com scrypt+sal (usuário seed `leonan@fullcycle.com.br` / `123` continua válido via verify-and-upgrade)
+- Respostas 500 devolvem "Erro interno" sem detalhes (detalhe só com `DEBUG=true`)
+
+## Next steps
+- Review the diff and commit the refactored code (17 entradas em `git status`; `PLANO.md` e `reports/` já estavam modificados antes desta fase)
+- Report kept at ../reports/audit-project-2.md
+================================
+```

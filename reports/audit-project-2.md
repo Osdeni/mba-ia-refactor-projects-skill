@@ -1,0 +1,170 @@
+================================
+ARCHITECTURE AUDIT REPORT
+================================
+Project: ecommerce-api-legacy
+Stack:   JavaScript (Node.js 24) + Express 4.22.1 (declared ^4.18.2)
+Files:   3 analyzed | ~180 lines of code
+
+## Summary
+CRITICAL: 5 | HIGH: 5 | MEDIUM: 5 | LOW: 3
+
+## Findings
+
+### [CRITICAL] Hardcoded credentials & configuration (AP-01)
+File: src/utils.js:1-7
+Description: Objeto `config` com segredos literais: `dbPass: "senha_super_secreta_prod_123"` (:3), `paymentGatewayKey: "pk_live_1234567890abcdef"` (:4), `smtpUser` (:5) e `port: 3000` (:6). `process.env` não é referenciado em nenhum arquivo; não existe `.env.example` nem `.gitignore`.
+Impact: Segredos de produção (chave live do gateway de pagamento, senha do banco) ficam no histórico do git e são idênticos em todos os ambientes; a porta não pode ser alterada sem editar código.
+Recommendation: Criar módulo `config/` que lê `process.env` com defaults seguros (`PORT=3000`, `NODE_ENV=development`) e adicionar `.env.example` + `.gitignore`; remover os segredos do código (playbook P1).
+
+### [CRITICAL] God class / God module (AP-03)
+File: src/AppManager.js:4-139
+Description: A classe `AppManager` cria a conexão (`new sqlite3.Database` :7), define o schema e os seeds (`initDb` :10-23), registra as três rotas (`setupRoutes` :25-138), valida entrada (:35), decide aprovação de pagamento (:46), persiste usuários/matrículas/pagamentos/auditoria (:50-72) e monta o relatório financeiro (:80-129). Cobre 5 domínios (users, courses, enrollments, payments, audit_logs) em um único arquivo; `src/` tem apenas 3 arquivos.
+Impact: Impossível testar regra de pagamento ou relatório sem subir Express e SQLite; qualquer alteração em um domínio toca o mesmo arquivo; nenhuma separação de camadas.
+Recommendation: Decompor em `config/`, `db/`, `models/`, `services/`, `controllers/`, `routes/` e `middlewares/`, com composição no ponto de entrada (playbook P3).
+
+### [CRITICAL] Weak or plaintext credential storage (AP-04)
+File: src/utils.js:17-23
+Description: `badCrypto(pwd)` concatena 10.000 vezes os 2 primeiros caracteres do base64 da senha e devolve `substring(0, 10)` — não é hash, é uma codificação reversível, sem sal, e o resultado depende só dos primeiros bytes da senha (colisões triviais). Seeds gravam senha em texto puro: `pass '123'` em src/AppManager.js:18. Nenhuma dependência `bcrypt`/`scrypt`/`argon2`.
+Impact: Qualquer leitura da tabela `users` equivale a um dump de credenciais; senhas diferentes com o mesmo prefixo geram o mesmo "hash".
+Recommendation: Usar `crypto.scrypt` (stdlib) com sal aleatório e formato versionado, com verify-and-upgrade para o usuário seed continuar funcionando (playbook P4).
+
+### [CRITICAL] Sensitive data exposure — responses & logs (AP-05)
+File: src/AppManager.js:45
+Description: `console.log(\`Processando cartão ${cc} na chave ${config.paymentGatewayKey}\`)` escreve o número completo do cartão e a chave live do gateway no stdout a cada checkout. Também `SELECT * FROM courses`/`enrollments` (:83, :92) carregam colunas desnecessárias para o relatório.
+Impact: Número de cartão (dado PCI) e segredo do gateway ficam em logs de servidor/agregadores; vazamento em qualquer acesso a logs.
+Recommendation: Logger com mascaramento (`**** 4444`), nunca logar chaves; serializers com whitelist de colunas (playbook P5).
+
+### [CRITICAL] Unprotected privileged or dangerous endpoints (AP-06)
+File: src/AppManager.js:80-137
+Description: `GET /api/admin/financial-report` (:80) devolve receita e nomes de todos os alunos sem nenhuma autenticação; `DELETE /api/users/:id` (:131) apaga qualquer usuário e responde 200 incondicionalmente, mesmo quando `err` é preenchido ou nenhuma linha é afetada (:133-135). Não há middleware de auth em src/app.js.
+Impact: Qualquer cliente anônimo lê dados financeiros/PII e destrói contas.
+Recommendation: Middleware `requireAdmin` validando `X-Admin-Token` contra `ADMIN_TOKEN` do ambiente em `/api/admin/*` e no `DELETE /api/users/:id`; responder 404 quando o usuário não existir (playbook P6).
+
+### [HIGH] Business logic in route handlers — fat controllers (AP-07)
+File: src/AppManager.js:28-78
+Description: O handler de `POST /api/checkout` (51 linhas) faz parse (:29-33), validação (:35), busca de curso e usuário (:37, :40), decisão de pagamento `cc.startsWith("4")` (:46), criação de usuário com senha default (:66-72), três INSERTs (:50-57), escrita em cache global (:59) e resposta (:60). Mesmo padrão em `GET /api/admin/financial-report` (:80-129, 50 linhas com agregação de receita inline).
+Impact: A regra "cartão começando com 4 é aprovado" e o fluxo de matrícula não podem ser testados nem reutilizados fora do HTTP; alterações na regra exigem editar o handler.
+Recommendation: Controllers finos (parse → validate → service → respond) com `CheckoutService`, `PaymentGateway` e `ReportService` (playbook P7).
+
+### [HIGH] Global mutable state / shared connection (AP-08)
+File: src/utils.js:9-10
+Description: `let globalCache = {}` (:9) e `let totalRevenue = 0` (:10) são singletons mutáveis de módulo; `globalCache` é escrito por `logAndCache` (:12-15, chamado em src/AppManager.js:59) e nunca lido; `totalRevenue` é exportado como primitivo (cópia, nunca atualizado). A conexão `this.db` é criada dentro do construtor (src/AppManager.js:7) sem injeção.
+Impact: Estado compartilhado entre requisições cresce sem limite (leak) e impede testes isolados; a conexão não pode ser substituída por um mock ou por um arquivo.
+Recommendation: Remover o cache morto, injetar a conexão via módulo `db/` e criar a app por factory (`createApp(deps)`) (playbook P8).
+
+### [HIGH] No centralized error handling / exception swallowing (AP-09)
+File: src/AppManager.js:37-135
+Description: Não existe middleware `(err, req, res, next)` nem handler 404 em src/app.js. Callbacks ignoram `err` em :57 (audit log), :83→:92 (`enrollments.length` sobre `undefined` derruba o processo se a query falhar), :104, :106 e :133 (DELETE responde 200 mesmo com erro). Blocos `if (err) return res.status(500).send("...")` repetidos em :41, :51, :55, :70, :84. Erros de curso e de banco são fundidos em um único 404 (:38).
+Impact: Falha de banco no relatório gera `TypeError` não capturado e encerra o processo Node; erros reais são mascarados por 200/404 genéricos; sem `unhandledRejection` handler.
+Recommendation: Classes `AppError`/`NotFoundError`/`ValidationError`, um `errorHandler` central + `notFoundHandler`, e `asyncHandler` para propagar rejeições (playbook P9).
+
+### [HIGH] Insecure runtime defaults (AP-10)
+File: src/app.js:12-14
+Description: `app.listen(config.port)` usa a porta literal de src/utils.js:6; não há tratamento de `NODE_ENV`, `HOST` ou `DEBUG`; sem `helmet`, sem política de CORS, sem limite de tamanho de body além do default; erros de banco vão ao cliente como texto (`"Erro DB"`).
+Impact: A mesma configuração serve dev e produção; impossível endurecer o deploy sem alterar código.
+Recommendation: `PORT`, `HOST`, `NODE_ENV`, `DEBUG`, `ADMIN_TOKEN` lidos do ambiente no módulo de config, com respostas de erro sem detalhes internos em produção (playbook P1).
+
+### [HIGH] Callback hell / tight coupling without DI (AP-11)
+File: src/AppManager.js:37-77
+Description: Checkout com 5 níveis de callbacks aninhados (`db.get` → `db.get` → `db.run` → `db.run` → `db.run`, :37-63) mais a closure `processPaymentAndEnroll` (:43) chamada de dois ramos (:71, :74); `const self = this` (:26) e `function(err)` para acessar `this.lastID` (:50, :54, :69). O relatório usa contadores manuais de conclusão `coursesPending--`/`enrPending--` (:86, :93, :97, :117-121) para decidir quando responder, com `report.push` fora de ordem.
+Impact: Fluxo de controle ilegível; qualquer exceção síncrona dentro de um callback escapa do Express; a ordem dos cursos no relatório é não determinística.
+Recommendation: Wrapper promisificado do `sqlite3` (`run/get/all` retornando Promise) + `async/await`; injeção da conexão nos models (playbook P10).
+
+### [MEDIUM] N+1 queries (AP-12)
+File: src/AppManager.js:83-126
+Description: `SELECT * FROM courses` (:83) e, dentro de `courses.forEach`, `SELECT * FROM enrollments WHERE course_id = ?` (:92); dentro de `enrollments.forEach`, `SELECT name, email FROM users` (:104) e `SELECT amount, status FROM payments` (:106) por matrícula. Para C cursos e E matrículas: 1 + C + 2E queries.
+Impact: O relatório escala linearmente com o número de matrículas em round-trips ao banco e depende dos contadores manuais da AP-11.
+Recommendation: Uma única query com `LEFT JOIN enrollments/users/payments` (ou JOIN + agregação `SUM(CASE WHEN status='PAID')`) e montagem do relatório em memória (playbook P11).
+
+### [MEDIUM] Duplicated logic — validation, serialization, rules (AP-13)
+File: src/AppManager.js:41-84
+Description: Cinco blocos `if (err) return res.status(500).send("<msg>")` quase idênticos (:41, :51, :55, :70, :84), sendo `"Erro DB"` repetido em :41 e :84; o status `'PAID'` é escrito como literal na seed (:21), na decisão (:46) e na comparação do relatório (:108). A formatação de resposta de erro (texto puro) é reescrita em cada ponto.
+Impact: Mensagens e status divergem com o tempo; qualquer mudança no formato de erro exige tocar 8 pontos.
+Recommendation: Validators e serializers como fonte única, erros lançados como classes e formatados no handler central (playbook P12).
+
+### [MEDIUM] Deprecated / legacy API usage (AP-14)
+File: src/AppManager.js:7-133
+Description: Toda a camada de dados usa a API callback do `sqlite3` (`db.run/get/all` com callbacks em :12-21, :37, :40, :50, :54, :57, :69, :83, :92, :104, :106, :133) em vez de wrapper promisificado ou `node:sqlite` (Node 24 disponível). `let` usado para constantes em src/utils.js:9-10 e em todas as variáveis de handler (17 ocorrências). Express 4 (`^4.18.2`) é major em manutenção; handlers assíncronos não propagam erros.
+Impact: Estilo callback força os aninhamentos da AP-11; upgrade para Express 5 ou `node:sqlite` exigirá reescrever tudo.
+Recommendation: Wrapper `db/` com Promises e `async/await`; `const` por padrão; `asyncHandler` para o Express 4 (playbook P13).
+
+### [MEDIUM] Missing or inconsistent input validation (AP-15)
+File: src/AppManager.js:29-35
+Description: A checagem `if (!u || !e || !cid || !cc)` (:35) omite `pwd` (fallback silencioso para `"123456"` em :68); `card` não é coagido para string — número no JSON (`"card": 4111...`) faz `cc.startsWith` lançar `TypeError` (:46) e derrubar a requisição sem resposta; `c_id` e `req.params.id` (:132) não são validados como inteiros; e-mail não é validado (`"eml": "x"` cria usuário). Sem `express.json({ limit })`.
+Impact: 500s e crash por entrada malformada; usuários criados com senha padrão conhecida e e-mails inválidos. Severidade mantida em MEDIUM, mas a senha default é tratada pela AP-04.
+Recommendation: `validateCheckout(body)` com `ValidationError` mantendo a mensagem `"Bad Request"` e status 400; coerção de tipos antes de chamar o service (playbook P12).
+
+### [MEDIUM] Data integrity gaps — no FK / cascade / transactions (AP-16)
+File: src/AppManager.js:12-16
+Description: Os `CREATE TABLE` não têm `FOREIGN KEY`, `NOT NULL` nem `UNIQUE(email)`; `PRAGMA foreign_keys` nunca é ativado; valores monetários em `REAL` (:13, :15). O checkout faz até 4 INSERTs encadeados (:50-57, :69) sem `BEGIN/COMMIT` — falha no pagamento deixa a matrícula órfã. `DELETE FROM users` (:133) deixa `enrollments`/`payments` pendurados, como o próprio texto da resposta admite (:135).
+Impact: Dados inconsistentes (matrículas sem pagamento, pagamentos sem usuário), relatório financeiro com `'Unknown'`, e-mails duplicados.
+Recommendation: Schema com FK + `ON DELETE CASCADE`, `UNIQUE(email)`, `NOT NULL`, `PRAGMA foreign_keys = ON`; wrapper `withTransaction()` no checkout (playbook P14).
+
+### [LOW] Magic numbers / strings (AP-17)
+File: src/AppManager.js:46-68
+Description: `cc.startsWith("4")` (:46) codifica a regra de aprovação; `"PAID"`/`"DENIED"` literais (:46, :48, :108); senha default `"123456"` (:68); `10000` iterações em src/utils.js:19; `datetime('now')` inline (:57).
+Impact: Regras de negócio escondidas em literais, sem nome nem ponto único de alteração.
+Recommendation: Módulo de constantes (`PAYMENT_STATUS`, `APPROVED_CARD_PREFIX`) (playbook P15).
+
+### [LOW] Cryptic or inconsistent naming (AP-18)
+File: src/AppManager.js:29-33
+Description: `u, e, p, cid, cc` para nome, e-mail, senha, id do curso e cartão (:29-33); `e` também é o nome idiomático de erro; `enr`, `c` (:89, :102); classe `AppManager` e arquivo `utils.js` como "gaveta de bagunça" (config + cache + crypto); mistura pt/en (`Erro Matrícula`, `students`); `Frankenstein LMS` em src/app.js:13; o diretório chama-se `ecommerce-api-legacy` mas o domínio é LMS.
+Impact: Leitura lenta e propensa a erro; campos externos (`usr`, `eml`, `c_id`) precisam ser preservados no contrato, mas os internos não.
+Recommendation: Renomear internamente (`name`, `email`, `password`, `courseId`, `cardNumber`) mantendo os nomes dos campos da API (playbook P15).
+
+### [LOW] Code hygiene — print-logging, dead code, unused imports (AP-19)
+File: src/utils.js:9-25
+Description: `totalRevenue` exportado e importado (src/AppManager.js:2) mas nunca usado; `globalCache` só é escrito (`logAndCache`, :12-15) e nunca lido; `dbUser`/`dbPass`/`smtpUser` nunca são lidos (SQLite em memória não usa credenciais). `console.log` como logging em src/AppManager.js:45, src/utils.js:13 e src/app.js:13. Sem `.gitignore` (`node_modules/` versionável), sem linter.
+Impact: Código morto confunde a leitura e o cache global vaza memória.
+Recommendation: Remover código morto, logger simples com níveis, `.gitignore` (playbook P15).
+
+## Deprecated APIs
+| Usage | Location | Modern equivalent |
+|---|---|---|
+| `sqlite3` callback API (`db.run/get/all(sql, params, cb)`) | src/AppManager.js:12-21, :37-133 | wrapper promisificado (`util.promisify`) + `async/await`, ou `node:sqlite` |
+| `function(err) { this.lastID }` + `const self = this` | src/AppManager.js:26, :50, :54, :69 | wrapper que resolve `{ lastID, changes }` |
+| `let` para constantes/valores nunca reatribuídos | src/utils.js:9-10; src/AppManager.js:29-33, :81, :86 | `const` |
+| Express 4 (`^4.18.2`, resolvido 4.22.1) — handlers async não propagam erros | package.json:10 | `asyncHandler` no Express 4 (ou migrar para Express 5) |
+
+## Refactoring Plan (preview)
+Mode: Monolith decomposition
+Target structure:
+```
+src/
+├── app.js                  # entry point (mantido): createApp() + listen
+├── config/index.js         # PORT, HOST, NODE_ENV, DEBUG, ADMIN_TOKEN, PAYMENT_GATEWAY_KEY (defaults seguros)
+├── constants.js            # PAYMENT_STATUS, APPROVED_CARD_PREFIX, mensagens
+├── db/
+│   ├── connection.js       # sqlite3 promisificado (run/get/all/exec, withTransaction)
+│   └── schema.js           # CREATE TABLE com FK/UNIQUE/NOT NULL + seeds
+├── errors/index.js         # AppError, ValidationError, NotFoundError, PaymentDeniedError
+├── logger.js               # logger com níveis e mascaramento
+├── models/
+│   ├── user.js             # findByEmail, create (scrypt), deleteById
+│   ├── course.js           # findActiveById, findAll
+│   ├── enrollment.js       # create
+│   ├── payment.js          # create
+│   └── auditLog.js         # record
+├── services/
+│   ├── paymentGateway.js   # charge(card) → PAID/DENIED
+│   ├── checkoutService.js  # transação: user → enrollment → payment → audit
+│   └── reportService.js    # relatório financeiro com JOIN
+├── controllers/
+│   ├── checkoutController.js
+│   ├── adminController.js
+│   └── userController.js
+├── middlewares/
+│   ├── requireAdmin.js
+│   ├── asyncHandler.js
+│   └── errorHandler.js     # + notFoundHandler
+├── validators/checkout.js
+└── routes/index.js         # /api/checkout, /api/admin/*, /api/users/:id
+.env.example
+.gitignore
+```
+Contract to preserve: 3 endpoints (`POST /api/checkout` → 200 `{msg, enrollment_id}` / 400 "Bad Request" / 400 "Pagamento recusado" / 404 "Curso não encontrado"; `GET /api/admin/financial-report` → 200 `[{course, revenue, students[{student, paid}]}]`; `DELETE /api/users/:id` → 200 texto), erros em texto puro via `res.status(n).send(msg)`, seeds (Leonan / leonan@fullcycle.com.br / 123, cursos Clean Architecture e Docker, matrícula 1 paga), run command `npm start` (`node src/app.js`), porta 3000 por padrão.
+Security-driven contract changes expected: `GET /api/admin/financial-report` e `DELETE /api/users/:id` passam a exigir header `X-Admin-Token` (401 sem token); `DELETE /api/users/:id` responde 404 quando o usuário não existe; número do cartão e chave do gateway deixam de aparecer em logs; senha de novos usuários passa a ser hash scrypt (usuário seed continua autenticável via verify-and-upgrade).
+
+================================
+Total: 18 findings
+================================
