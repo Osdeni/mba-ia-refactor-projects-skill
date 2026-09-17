@@ -1,0 +1,93 @@
+# Validação final a partir de um clone limpo do GitHub
+
+Repositório: https://github.com/Osdeni/mba-ia-refactor-projects-skill (commit 25c0f29)
+Procedimento: git clone → venv/npm install do zero → seed (P3) → boot com PORT/ADMIN_TOKEN → smoke test de todas as rotas.
+
+## Projeto 1
+```
+== smoke code-smells-project @ http://127.0.0.1:5150 ==
+GET    /                                      200  ['endpoints', 'mensagem', 'versao']
+GET    /health                                200  ['ambiente', 'counts', 'database', 'status', 'versao']
+GET    /produtos                              200  ['dados', 'sucesso']
+GET    /produtos/1                            200  ['dados', 'sucesso']
+GET    /produtos/busca?q=mouse&categoria=informatica&preco_min=10&preco_max=500 200  ['dados', 'sucesso', 'total']
+POST   /produtos                              201  ['dados', 'mensagem', 'sucesso']
+PUT    /produtos/11                           200  ['mensagem', 'sucesso']
+GET    /usuarios                              200  ['dados', 'sucesso']
+GET    /usuarios/1                            200  ['dados', 'sucesso']
+POST   /usuarios                              201  ['dados', 'sucesso']
+POST   /login                                 200  ['dados', 'mensagem', 'sucesso']
+POST   /pedidos                               201  ['dados', 'mensagem', 'sucesso']
+GET    /pedidos                               200  ['dados', 'sucesso']
+GET    /pedidos/usuario/2                     200  ['dados', 'sucesso']
+PUT    /pedidos/1/status                      200  ['mensagem', 'sucesso']
+GET    /relatorios/vendas                     200  ['dados', 'sucesso']
+DELETE /produtos/11                           200  ['mensagem', 'sucesso']
+-- probes (devem ser 4xx, nunca 500) --
+POST   /produtos                              400  ['erro', 'sucesso']
+POST   /login                                 401  ['erro', 'sucesso']
+PUT    /pedidos/999999/status                 404  ['erro', 'sucesso']
+-- senha exposta? --
+ocorrencias de "senha": 0
+-- secret no health? --
+ocorrencias de "secret": 0
+-- admin (por último) --
+POST   /admin/query                           200  ['dados', 'sucesso']
+POST   /admin/reset-db                        200  ['mensagem', 'sucesso']
+```
+
+## Projeto 2
+```
+== smoke ecommerce-api-legacy @ http://127.0.0.1:3100 ==
+POST   /api/checkout                    200  ['enrollment_id', 'msg']
+POST   /api/checkout                    400  text:Pagamento recusado 
+POST   /api/checkout                    400  text:Bad Request 
+POST   /api/checkout                    404  text:Curso não encontrado 
+GET    /api/admin/financial-report      200  array[2]
+-- destrutivo por último --
+DELETE /api/users/1                     200  text:Usuário deletado 
+GET    /api/admin/financial-report      200  array[2]
+-- probes (nunca 500 / nunca derrubar o processo) --
+POST   /api/checkout                    400  text:Bad Request 
+POST   /api/checkout                    400  text:Bad Request 
+GET    /api/nope                        404  text:Not Found 
+-- processo ainda vivo? --
+alive=200
+```
+
+## Projeto 3
+```
+== smoke task-manager-api @ http://127.0.0.1:5250 ==
+GET    /                                        200  ['message', 'version']
+GET    /health                                  200  ['status', 'timestamp']
+GET    /tasks                                   200  array[10]
+GET    /tasks/1                                 200  ['category_id', 'created_at', 'description', 'due_date', 'id', 'overdue', 'priority', 'status', 'tags', 'title', 'updated_at', 'user_id']
+GET    /tasks/stats                             200  ['cancelled', 'completion_rate', 'done', 'in_progress', 'overdue', 'pending', 'total']
+GET    /tasks/search?q=JWT&status=pending       200  array[1]
+GET    /users                                   200  array[3]
+GET    /users/1                                 200  ['active', 'created_at', 'email', 'id', 'name', 'role', 'tasks']
+GET    /users/1/tasks                           200  array[4]
+GET    /categories                              200  array[4]
+GET    /reports/summary                         200  ['generated_at', 'overdue', 'overview', 'recent_activity', 'tasks_by_priority', 'tasks_by_status', 'user_productivity']
+GET    /reports/user/1                          200  ['statistics', 'user']
+POST   /login                                   200  ['message', 'token', 'user']
+POST   /tasks                                   201  ['category_id', 'created_at', 'description', 'due_date', 'id', 'priority', 'status', 'tags', 'title', 'updated_at', 'user_id']
+PUT    /tasks/11                                200  ['category_id', 'created_at', 'description', 'due_date', 'id', 'priority', 'status', 'tags', 'title', 'updated_at', 'user_id']
+DELETE /tasks/11                                200  ['message']
+POST   /users                                   201  ['active', 'created_at', 'email', 'id', 'name', 'role']
+PUT    /users/4                                 200  ['active', 'created_at', 'email', 'id', 'name', 'role']
+POST   /categories                              201  ['color', 'created_at', 'description', 'id', 'name']
+PUT    /categories/5                            200  ['color', 'created_at', 'description', 'id', 'name']
+DELETE /categories/5                            200  ['message']
+DELETE /users/4                                 200  ['message']
+-- probes (devem ser 4xx, nunca 500) --
+POST   /tasks                                   201  ['category_id', 'created_at', 'description', 'due_date', 'id', 'priority', 'status', 'tags', 'title', 'updated_at', 'user_id']
+GET    /tasks/search?priority=abc               400  ['error']
+PUT    /tasks/1                                 400  ['error']
+PUT    /categories/1                            400  ['error']
+GET    /nope                                    404  ['error']
+-- hash de senha exposto? --
+ocorrencias de "password": 0
+```
+
+Resultado: P1 19/19 rotas, P2 3/3 rotas, P3 22/22 rotas; zero respostas 500; senha/secret ausentes das respostas; cartão mascarado no log; processos vivos após os probes.
